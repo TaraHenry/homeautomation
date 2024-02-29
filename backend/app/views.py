@@ -27,21 +27,97 @@ from math import floor
 
 
 # 1. CREATE ROUTE FOR '/api/set/combination'
-    
-# 2. CREATE ROUTE FOR '/api/check/combination'
+@app.route('/api/set/combination', methods=['POST']) 
+def set_passCode():
+    passcode = request.json.get('code')
 
+    print(f"passcode: {passcode}")
+
+    if request.method == "POST" :
+        try:
+                # Update the document in the 'code' collection with the new passcode
+                item= mongo.setPass(passcode)
+                if item:
+                    return jsonify({"status":"complete","data":"complete"})
+        except Exception as e:
+            msg=str(e)  
+            print(f"update_pwd Error: f{msg}")
+        return jsonify({"status":"failed","data":"failed"})  
+
+# 2. CREATE ROUTE FOR '/api/check/combination'
+@app.route('/api/check/combination', methods=['POST'])
+def check_passcode():
+    '''Checks if the passcode is correct'''
+    passcode = request.form.get('passcode')
+
+    if request.method == "POST":
+        try:
+            # Validate passcode against the 'code' collection
+            count = mongo.count_passcodes(passcode)
+            if count > 0:
+                return jsonify({"status": "complete", "data": "complete"})
+        except Exception as e:
+            msg = str(e)
+            print(f"check_passcode Error: {msg}")
+        return jsonify({"status": "failed", "data": "failed"})
+    
 # 3. CREATE ROUTE FOR '/api/update'
-   
+@app.route('/api/update/', methods=['POST']) 
+def update_radar():      
+    if request.method == "POST":
+        try:
+            jsonDoc= request.get_json()
+            # Update the document in the 'code' collection with the new passcode
+
+            timestamp = datetime.now().timestamp()
+            timestamp = floor(timestamp)
+            jsonDoc['timestamp'] = timestamp
+
+            Mqtt.publish("620154033",mongo.dumps(jsonDoc))
+            Mqtt.publish("620154033_pub",mongo.dumps(jsonDoc))
+            Mqtt.publish("620154033_sub",mongo.dumps(jsonDoc))
+
+            print(f"MQTT: {jsonDoc}")
+
+            item = mongo.insertToRadar(jsonDoc)
+            if item:
+                return jsonify({"status": "complete", "data": "complete"})
+        except Exception as e:
+            msg = str(e)
+            print(f"update Error: {msg}")
+        return jsonify({"status": "failed", "data": "failed"})   
+
 # 4. CREATE ROUTE FOR '/api/reserve/<start>/<end>'
+@app.route('/api/reserve/<start>/<end>', methods=['GET'])
+def get_reserve_radar(start, end):
+    '''Returns the 'reserve' field/variable, using all documents found between specified start and end timestamps'''
+    start = int(start)
+    end = int(end)
+    '''RETURNS ALL THE DATA FROM THE DATABASE THAT EXIST IN BETWEEN THE START AND END TIMESTAMPS'''
+ 
+    if request.method == "GET":
+        '''Add your code here to complete this route'''
+        try:
+            item = mongo.retrieve_radar(start,end)
+            data= list(item)
+            if data:
+                return jsonify({"status":"complete","data": data})
+            
+        except Exception as e:
+            print(f"retrieve_radar error: f{str(e)}") 
+        return jsonify({"status":"not found","data":[]})
 
 # 5. CREATE ROUTE FOR '/api/avg/<start>/<end>'
-
-
-   
-
-
-
-
+@app.route('/api/avg/<start>/<end>', methods=['GET'])
+def get_average_radar(start, end):
+    '''Returns the average of the 'reserve' field/variable, using all documents found between specified start and end timestamps'''
+    if request.method == 'GET':
+        try:
+            average = mongo.calculate_res_avg(start, end)
+            if average:
+                return jsonify({"status": "complete", "data": average})
+        except Exception as e:
+            return jsonify({"status": "failed", "data": 0})
 
 
 @app.route('/api/file/get/<filename>', methods=['GET']) 

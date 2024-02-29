@@ -7,6 +7,11 @@
 
 // IMPORT ALL REQUIRED LIBRARIES
 #include <rom/rtc.h>
+#include <ArduinoJson.h>
+
+#include <SPI.h>
+#include "Adafruit_GFX.h"
+#include "Adafruit_ILI9341.h"
 
 
 
@@ -36,6 +41,32 @@
 
 // DEFINE VARIABLES
 
+#define analogPin A0 
+#define BTN1      27
+#define BTN2      26
+#define BTN3      25
+
+
+#define TFT_DC    17
+#define TFT_CS    5
+#define TFT_RST   16
+#define TFT_CLK   18
+#define TFT_MOSI  23
+#define TFT_MISO  19
+
+#define BOX_WIDTH 50
+#define BOX_HEIGHT 50
+#define SPACING 5
+#define MARGIN 10
+
+uint8_t currentDigit = 1; // Keeps track of the current digit being modified by the potentiometer 
+bool lockState = false; // keeps track of the Open and Close state of the lock
+
+unsigned char d1 = 0;
+unsigned char d2 = 0;
+unsigned char d3 = 0;
+unsigned char d4 = 0;
+
 
 
 
@@ -47,14 +78,14 @@
 
 
 // MQTT CLIENT CONFIG  
-static const char* pubtopic      = "620012345";                    // Add your ID number here
-static const char* subtopic[]    = {"620012345_sub","/elet2415"};  // Array of Topics(Strings) to subscribe to
-static const char* mqtt_server   = "address or ip";         // Broker IP address or Domain name as a String 
+static const char* pubtopic      = "620154033";                    // Add your ID number here
+static const char* subtopic[]    = {"620154033_sub","/elet2415"};  // Array of Topics(Strings) to subscribe to
+static const char* mqtt_server   = "www.yanacreations.com";         // Broker IP address or Domain name as a String 
 static uint16_t mqtt_port        = 1883;
 
 // WIFI CREDENTIALS
-const char* ssid       = "YOUR_SSID"; // Add your Wi-Fi ssid
-const char* password   = "YOUR_PASS"; // Add your Wi-Fi password 
+const char* ssid       = "MonaConnect"; // Add your Wi-Fi ssid
+const char* password   = ""; // Add your Wi-Fi password 
 
 
 
@@ -97,7 +128,7 @@ void showLockState(void);
 
 
 /* Initialize class objects*/
-
+Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_MOSI, TFT_CLK, TFT_RST, TFT_MISO);
 
 
  
@@ -107,16 +138,31 @@ void showLockState(void);
 
 
 void setup() {
-    Serial.begin(115200);  // INIT SERIAL  
- 
+  Serial.begin(115200);  // INIT SERIAL  
+
+  /* TFT DISPLAY SET UP */
+  tft.begin();
+  tft.fillScreen(ILI9341_WHITE);
+  tft.setTextColor(ILI9341_DARKGREY);
+  tft.setTextSize(1);
+
+  /* ENABLE PULL-UP RESISTORS */
+  pinMode(BTN1,INPUT_PULLUP);
+  pinMode(BTN2,INPUT_PULLUP);
+  pinMode(BTN3,INPUT_PULLUP);
   
-    
-  // CONFIGURE THE ARDUINO PINS OF THE 7SEG AS OUTPUT
- 
-  /* Configure all others here */
 
   initialize();           // INIT WIFI, MQTT & NTP 
+
+  /*DISPLAY 0 ON START UP*/
+  digit1(0);
+  digit2(0);
+  digit3(0);
+  digit4(0);
+
   vButtonCheckFunction(); // UNCOMMENT IF USING BUTTONS THEN ADD LOGIC FOR INTERFACING WITH BUTTONS IN THE vButtonCheck FUNCTION
+
+  
 
 }
   
@@ -125,9 +171,30 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly: 
 
- 
+  int value = map(analogRead(analogPin),0,4096,0,10);
+
+  if(currentDigit == 1){
+    digit1(value);
+    d1 = value;
+  }
+
+  if(currentDigit == 2){
+    digit2(value);
+    d2 = value;
+  }
+  
+  if(currentDigit == 3){
+    digit3(value);
+    d3 = value;
+  }
+
+  if(currentDigit == 4){
+    digit4(value);
+    d4 = value;
+  }
 
   vTaskDelay(1000 / portTICK_PERIOD_MS);  
+  
 }
 
 
@@ -145,9 +212,28 @@ void vButtonCheck( void * pvParameters )  {
 
         // 1. Implement button1  functionality
 
+        if(digitalRead(BTN1) == LOW){
+
+          if(currentDigit == 4){
+            currentDigit = 1;
+          }
+          else{
+            currentDigit++; 
+          }         
+        }
+
         // 2. Implement button2  functionality
 
+        if(digitalRead(BTN2) == LOW){
+          checkPasscode();
+        }
+
         // 3. Implement button3  functionality
+
+        if(digitalRead(BTN3) == LOW){
+          lockState = false;
+          showLockState();
+        }
        
         vTaskDelay(200 / portTICK_PERIOD_MS);  
     }
@@ -157,9 +243,8 @@ void vUpdate( void * pvParameters )  {
     configASSERT( ( ( uint32_t ) pvParameters ) == 1 );    
  
     for( ;; ) {
-          // Task code goes here.   
-          // PUBLISH to topic every second.  
-            
+
+
         vTaskDelay(1000 / portTICK_PERIOD_MS);  
     }
 }
@@ -187,9 +272,23 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
  
   // CONVERT MESSAGE TO JSON
+  StaticJsonDocument<1200> doc;
+  DeserializationError error = deserializeJson(doc, received);
+
+  if (error) {
+    Serial.print("deserializeJson() failed: ");
+    Serial.println(error.c_str());
+    return;
+  }
 
 
   // PROCESS MESSAGE
+  const char* type= doc["type"];
+
+  if (strcmp(type, "password")==0){
+
+    const char* code= doc["code"];
+  }
 
 }
 
@@ -219,6 +318,12 @@ void digit1(uint8_t number){
   // 4. Set the text colour of the number. Use any colour you like 
   // 5. Set font size to one 
   // 6. Print number to the screen 
+  
+  tft.setFont(&FreeSansBold18pt7b);
+  tft.fillRoundRect(MARGIN, tft.height() - BOX_HEIGHT - MARGIN, BOX_WIDTH, BOX_HEIGHT, 10, ILI9341_CYAN);
+  tft.setCursor(MARGIN + 15, tft.height() - BOX_HEIGHT + 25);
+  tft.setTextSize(1);
+  tft.print(number);
 }
  
 void digit2(uint8_t number){
@@ -229,6 +334,12 @@ void digit2(uint8_t number){
   // 4. Set the text colour of the number. Use any colour you like 
   // 5. Set font size to one 
   // 6. Print number to the screen 
+  
+  tft.setFont(&FreeSansBold18pt7b);
+  tft.fillRoundRect(MARGIN + BOX_WIDTH + SPACING, tft.height() - BOX_HEIGHT - MARGIN, BOX_WIDTH, BOX_HEIGHT, 10, ILI9341_CYAN);
+  tft.setCursor(MARGIN + BOX_WIDTH + SPACING + 15, tft.height() - BOX_HEIGHT + 25);
+  tft.setTextSize(1);
+  tft.print(number);
 }
 
 void digit3(uint8_t number){
@@ -239,6 +350,13 @@ void digit3(uint8_t number){
   // 4. Set the text colour of the number. Use any colour you like 
   // 5. Set font size to one 
   // 6. Print number to the screen 
+ 
+  tft.setFont(&FreeSansBold18pt7b);
+  tft.fillRoundRect(MARGIN + 2 * (BOX_WIDTH + SPACING), tft.height() - BOX_HEIGHT - MARGIN, BOX_WIDTH, BOX_HEIGHT, 10, ILI9341_CYAN);
+  tft.setCursor(MARGIN + 2 * (BOX_WIDTH + SPACING) + 15, tft.height() - BOX_HEIGHT + 25);
+  tft.setTextSize(1);
+  tft.print(number);
+
 }
 
 void digit4(uint8_t number){
@@ -249,6 +367,13 @@ void digit4(uint8_t number){
   // 4. Set the text colour of the number. Use any colour you like 
   // 5. Set font size to one 
   // 6. Print number to the screen 
+
+
+  tft.setFont(&FreeSansBold18pt7b);
+  tft.fillRoundRect(MARGIN + 3 * (BOX_WIDTH + SPACING), tft.height() - BOX_HEIGHT - MARGIN, BOX_WIDTH, BOX_HEIGHT, 10, ILI9341_CYAN);
+  tft.setCursor(MARGIN + 3 * (BOX_WIDTH + SPACING) + 15, tft.height() - BOX_HEIGHT + 25);
+  tft.setTextSize(1);
+  tft.print(number);  
 }
  
  
@@ -266,10 +391,13 @@ void checkPasscode(void){
       http.addHeader("Content-Type", "application/x-www-form-urlencoded"); // Specify content-type header      
       char message[20];  // Store the 4 digit passcode that will be sent to the backend for validation via HTTP POST
       
-      // 2. Insert all four (4) digits of the passcode into a string with 'passcode=1234' format and then save this modified string in the message[20] variable created above 
-       
-                      
+      // 2. Insert all four (4) digits of the passcode into a string with 'passcode=1234' format and then save this modified string in the message[20] variable created above
+
+
+      sprintf(message, "passcode=%d%d%d%d", d1, d2, d3, d4);
+                
       int httpResponseCode = http.POST(message);  // Send HTTP POST request and then wait for a response
+      // Serial.print(message);
 
       if (httpResponseCode > 0) {
         Serial.print("HTTP Response code: ");
@@ -277,12 +405,36 @@ void checkPasscode(void){
         String received = http.getString();
        
         // 3. CONVERT 'received' TO JSON. 
+
+        StaticJsonDocument<1000> doc;
+        DeserializationError error = deserializeJson(doc, received);  
+
+        if (error) {
+          Serial.print("deserializeJson() failed: ");
+          Serial.println(error.c_str());
+          return;
+        }
+
+        
         
 
         // 4. PROCESS MESSAGE. The response from the route that is used to validate the passcode
         // will be either {"status":"complete","data":"complete"}  or {"status":"failed","data":"failed"} schema.
         // (1) if the status is complete, set the lockState variable to true, then invoke the showLockState function
         // (2) otherwise, set the lockState variable to false, then invoke the showLockState function
+
+        const char* status = doc["status"];
+        // Serial.print(status);
+
+        if(strcmp(status, "complete") == 0){
+          lockState = true;
+          showLockState();
+        }
+        else{
+          lockState = false;
+          showLockState();
+
+        }
               
       }     
         
@@ -323,4 +475,3 @@ void showLockState(void){
     }
     
 }
- 

@@ -95,7 +95,7 @@ Modify the target in the proxy object found in the **frontend/vite.config.js** f
 ```js
 proxy: {
       '^/api*': { 
-        target: 'http://localhost:8080/' ,
+        target: 'http://172.16.193.21:8080/' ,
        changeOrigin: false,
     },   
   }

@@ -1,0 +1,70 @@
+<template>
+    <v-container class="container" justify="center" align="center">
+        <v-row style="max-width: 1200px;" justify="center" class="d-flex flex-wrap ga-12">
+            <v-col align="center" class="bg-surface">
+                <v-card title="Combination" color="surface" subtitle="Enter your four digit passcode" flat >
+                    <v-otp-input focus-all :length="4" v-model="passcode"></v-otp-input>
+                </v-card>
+            </v-col>
+        </v-row>
+        <v-row>
+            <v-col>
+                <v-card class="bg-background" flat>
+                    <v-btn class="bg-primary" text="Submit" variant="tonal" @click="storePasscode();"></v-btn>
+                </v-card>
+            </v-col>
+        </v-row>
+    </v-container>
+</template>
+
+<script setup>
+/** JAVASCRIPT HERE */
+
+// IMPORTS
+import { onBeforeUnmount, onMounted, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
+ 
+import { useAppStore } from "@/store/appStore";
+import { useMqttStore } from "@/store/mqttStore"; // Import Mqtt Store
+import { storeToRefs } from "pinia";
+
+// VARIABLES
+const router      = useRouter();
+const route       = useRoute();  
+const AppStore    = useAppStore();
+const Mqtt        = useMqttStore();
+const { payload, payloadTopic } = storeToRefs(Mqtt);
+
+const passcode = ref(["0000"]);
+
+// FUNCTIONS
+onMounted(()=>{
+    // THIS FUNCTION IS CALLED AFTER THIS COMPONENT HAS BEEN MOUNTED
+    Mqtt.connect(); // Connect to Broker located on the backend
+    setTimeout( ()=>{
+        // Subscribe to each topic
+        Mqtt.subscribe("620154033");
+        Mqtt.subscribe("620154033_pub");
+    },3000)
+});
+
+onBeforeUnmount(()=>{
+    // THIS FUNCTION IS CALLED RIGHT BEFORE THIS COMPONENT IS UNMOUNTED
+    Mqtt.unsubcribeAll();
+});
+
+function storePasscode() {
+    // Code to read passcode here
+    console.log(passcode.value);
+    AppStore.getSetPwd(passcode.value);
+    
+}
+</script>
+
+
+<style scoped>
+/** CSS STYLE HERE */
+
+
+</style>
+  
