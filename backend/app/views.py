@@ -62,7 +62,7 @@ def check_passcode():
         return jsonify({"status": "failed", "data": "failed"})
     
 # 3. CREATE ROUTE FOR '/api/update'
-@app.route('/api/update/', methods=['POST']) 
+@app.route('/api/update', methods=['POST']) 
 def update_radar():      
     if request.method == "POST":
         try:
